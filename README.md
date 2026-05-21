@@ -38,6 +38,10 @@ RunDeck brings all of that into one keyboard-driven dashboard.
 
 ## Installation
 
+```bash
+curl -fsSL https://raw.githubusercontent.com/IntScription/rundeck/main/scripts/install.sh | bash
+```
+
 ### Requirements
 
 RunDeck works best with:
