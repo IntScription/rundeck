@@ -378,3 +378,56 @@ Default keymaps:
 | `<leader>ra` | Add current Neovim project to RunDeck |
 | `<leader>rc` | Open create project helper |
 | `<leader>re` | Edit RunDeck config |
+
+## Docker
+
+Docker support is mainly for development, testing, and container users. RunDeck is designed to run directly on the host because it integrates with tmux, Neovim, local folders, browser URLs, and user config.
+
+Build:
+
+```bash
+docker build -t rundeck:local .
+```
+
+Run doctor:
+
+```bash
+docker run --rm rundeck:local doctor
+```
+
+Open a container shell:
+
+```bash
+docker compose run --rm shell
+```
+
+## Kubernetes
+
+Kubernetes support is provided as example manifests for running RunDeck as a toolbox/job container.
+
+Apply:
+
+```bash
+kubectl apply -f k8s/namespace.yaml
+kubectl apply -f k8s/configmap.yaml
+kubectl apply -f k8s/job.yaml
+```
+
+View doctor output:
+
+```bash
+kubectl logs -n rundeck job/rundeck-doctor
+```
+
+Run toolbox pod:
+
+```bash
+kubectl apply -f k8s/toolbox-pod.yaml
+kubectl exec -n rundeck -it rundeck-toolbox -- zsh
+```
+
+Clean up:
+
+```bash
+kubectl delete namespace rundeck
+```
