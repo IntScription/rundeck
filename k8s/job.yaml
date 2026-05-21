@@ -1,0 +1,31 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: rundeck-doctor
+  namespace: rundeck
+spec:
+  backoffLimit: 1
+  template:
+    metadata:
+      labels:
+        app: rundeck
+    spec:
+      restartPolicy: Never
+      containers:
+        - name: rundeck
+          image: ghcr.io/intscription/rundeck:0.1.0
+          imagePullPolicy: IfNotPresent
+          args: ["doctor"]
+          env:
+            - name: TERM
+              value: xterm-256color
+            - name: SHELL
+              value: /bin/zsh
+          volumeMounts:
+            - name: config
+              mountPath: /root/.config/rundeck
+              readOnly: true
+      volumes:
+        - name: config
+          configMap:
+            name: rundeck-config

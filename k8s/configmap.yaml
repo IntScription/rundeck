@@ -1,0 +1,39 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: rundeck-config
+  namespace: rundeck
+data:
+  config.toml: |
+    editor = "nvim"
+    shell = "/bin/zsh"
+    theme = "catppuccin-mocha"
+    top_pane_ratio = 70
+    show_icons = true
+    project_picker = "fzf"
+    project_roots = ["/workspace"]
+
+    [keymaps]
+    quit = "q"
+    help = "?"
+    search = "/"
+    add_project = "a"
+    create_project = "c"
+    remove_project = "d"
+    workspace = "enter"
+    workspace_alt = "t"
+    local_preview = "b"
+    deploy_preview = "B"
+    editor = "o"
+    lazygit = "g"
+    edit_deploy = "u"
+    config = "e"
+    theme = "T"
+    doctor = "D"
+    kill_session = "x"
+    stop_dev = "X"
+    reload = "r"
+    left = "h"
+    right = "l"
+    down = "j"
+    up = "k"

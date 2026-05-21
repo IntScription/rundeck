@@ -1,0 +1,32 @@
+services:
+  rundeck:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: rundeck:local
+    container_name: rundeck
+    working_dir: /workspace
+    volumes:
+      - .:/workspace/rundeck:ro
+      - rundeck-config:/root/.config/rundeck
+    environment:
+      - TERM=xterm-256color
+      - SHELL=/bin/zsh
+    command: ["doctor"]
+
+  shell:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: rundeck:local
+    working_dir: /workspace
+    volumes:
+      - .:/workspace/rundeck
+      - rundeck-config:/root/.config/rundeck
+    environment:
+      - TERM=xterm-256color
+      - SHELL=/bin/zsh
+    entrypoint: ["/bin/zsh"]
+
+volumes:
+  rundeck-config:
