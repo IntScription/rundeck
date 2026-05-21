@@ -1,0 +1,89 @@
+# RunDeck example config
+#
+# Copy this to:
+# ~/.config/rundeck/config.toml
+#
+# Or edit your config from inside RunDeck with:
+# e
+
+editor = "nvim"
+shell = "/bin/zsh"
+theme = "catppuccin-mocha"
+top_pane_ratio = 70
+show_icons = true
+
+# Currently supported:
+# "fzf"
+#
+# Set to "none" to disable picker features.
+project_picker = "fzf"
+
+# Optional roots used by add/create project pickers.
+# If empty, RunDeck scans common folders like ~/Projects and ~/Developer.
+project_roots = ["~/Projects", "~/Developer", "~/Code"]
+
+# Name of the tmux session where RunDeck dashboard lives.
+# RunDeck usually remembers this automatically.
+rundeck_session = "rundeck-dashboard"
+
+[keymaps]
+quit = "q"
+help = "?"
+search = "/"
+
+add_project = "a"
+create_project = "c"
+remove_project = "d"
+
+workspace = "enter"
+workspace_alt = "t"
+
+local_preview = "b"
+deploy_preview = "B"
+
+editor = "o"
+lazygit = "g"
+edit_deploy = "u"
+
+config = "e"
+theme = "T"
+doctor = "D"
+
+kill_session = "x"
+stop_dev = "X"
+reload = "r"
+
+left = "h"
+right = "l"
+down = "j"
+up = "k"
+
+# Example normal project
+#
+# [[projects]]
+# name = "My App"
+# path = "/Users/me/Projects/my-app"
+# port = 3000
+# deploy_url = "https://my-app.vercel.app"
+
+# Example monorepo/workspace project
+#
+# my-workspace/
+# ├─ web/package.json
+# ├─ mobile/package.json
+# └─ supabase/
+#
+# [[projects]]
+# name = "My Workspace"
+# path = "/Users/me/Projects/my-workspace"
+# port = 3000
+# deploy_url = "https://my-workspace.vercel.app"
+# dev_command = "cd web && npm run dev"
+
+# Example Vite project
+#
+# [[projects]]
+# name = "Expense Tracker"
+# path = "/Users/me/Projects/expense-tracker"
+# port = 5173
+# dev_command = "npm run dev"

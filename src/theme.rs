@@ -1,0 +1,127 @@
+use ratatui::style::Color;
+
+#[derive(Debug, Clone)]
+pub struct Theme {
+    pub id: &'static str,
+    pub label: &'static str,
+    pub bg: Color,
+    pub surface: Color,
+    pub border: Color,
+    pub text: Color,
+    pub muted: Color,
+    pub accent: Color,
+    pub success: Color,
+    pub warning: Color,
+    pub danger: Color,
+    pub highlight_bg: Color,
+}
+
+pub fn get(id: &str) -> Theme {
+    all()
+        .into_iter()
+        .find(|theme| theme.id == id)
+        .unwrap_or_else(|| all()[0].clone())
+}
+
+pub fn all() -> Vec<Theme> {
+    vec![
+        Theme {
+            id: "catppuccin-mocha",
+            label: "Catppuccin Mocha",
+            bg: Color::Rgb(17, 17, 27),
+            surface: Color::Rgb(30, 30, 46),
+            border: Color::Rgb(88, 91, 112),
+            text: Color::Rgb(205, 214, 244),
+            muted: Color::Rgb(127, 132, 156),
+            accent: Color::Rgb(137, 180, 250),
+            success: Color::Rgb(166, 227, 161),
+            warning: Color::Rgb(249, 226, 175),
+            danger: Color::Rgb(243, 139, 168),
+            highlight_bg: Color::Rgb(49, 50, 68),
+        },
+        Theme {
+            id: "tokyonight-night",
+            label: "Tokyo Night",
+            bg: Color::Rgb(26, 27, 38),
+            surface: Color::Rgb(36, 40, 59),
+            border: Color::Rgb(65, 72, 104),
+            text: Color::Rgb(192, 202, 245),
+            muted: Color::Rgb(86, 95, 137),
+            accent: Color::Rgb(122, 162, 247),
+            success: Color::Rgb(158, 206, 106),
+            warning: Color::Rgb(224, 175, 104),
+            danger: Color::Rgb(247, 118, 142),
+            highlight_bg: Color::Rgb(41, 46, 66),
+        },
+        Theme {
+            id: "kanagawa-wave",
+            label: "Kanagawa Wave",
+            bg: Color::Rgb(31, 31, 40),
+            surface: Color::Rgb(42, 42, 55),
+            border: Color::Rgb(84, 84, 109),
+            text: Color::Rgb(220, 215, 186),
+            muted: Color::Rgb(114, 140, 154),
+            accent: Color::Rgb(126, 156, 216),
+            success: Color::Rgb(152, 187, 108),
+            warning: Color::Rgb(230, 195, 132),
+            danger: Color::Rgb(195, 64, 67),
+            highlight_bg: Color::Rgb(54, 54, 69),
+        },
+        Theme {
+            id: "gruvbox-dark",
+            label: "Gruvbox Dark",
+            bg: Color::Rgb(40, 40, 40),
+            surface: Color::Rgb(60, 56, 54),
+            border: Color::Rgb(102, 92, 84),
+            text: Color::Rgb(235, 219, 178),
+            muted: Color::Rgb(168, 153, 132),
+            accent: Color::Rgb(131, 165, 152),
+            success: Color::Rgb(184, 187, 38),
+            warning: Color::Rgb(250, 189, 47),
+            danger: Color::Rgb(251, 73, 52),
+            highlight_bg: Color::Rgb(80, 73, 69),
+        },
+        Theme {
+            id: "rose-pine",
+            label: "Rose Pine",
+            bg: Color::Rgb(25, 23, 36),
+            surface: Color::Rgb(31, 29, 46),
+            border: Color::Rgb(64, 61, 82),
+            text: Color::Rgb(224, 222, 244),
+            muted: Color::Rgb(110, 106, 134),
+            accent: Color::Rgb(196, 167, 231),
+            success: Color::Rgb(49, 116, 143),
+            warning: Color::Rgb(246, 193, 119),
+            danger: Color::Rgb(235, 111, 146),
+            highlight_bg: Color::Rgb(38, 35, 58),
+        },
+        Theme {
+            id: "nord",
+            label: "Nord",
+            bg: Color::Rgb(46, 52, 64),
+            surface: Color::Rgb(59, 66, 82),
+            border: Color::Rgb(76, 86, 106),
+            text: Color::Rgb(216, 222, 233),
+            muted: Color::Rgb(129, 161, 193),
+            accent: Color::Rgb(136, 192, 208),
+            success: Color::Rgb(163, 190, 140),
+            warning: Color::Rgb(235, 203, 139),
+            danger: Color::Rgb(191, 97, 106),
+            highlight_bg: Color::Rgb(67, 76, 94),
+        },
+        Theme {
+            id: "dracula",
+            label: "Dracula",
+            bg: Color::Rgb(40, 42, 54),
+            surface: Color::Rgb(50, 52, 66),
+            border: Color::Rgb(68, 71, 90),
+            text: Color::Rgb(248, 248, 242),
+            muted: Color::Rgb(98, 114, 164),
+            accent: Color::Rgb(189, 147, 249),
+            success: Color::Rgb(80, 250, 123),
+            warning: Color::Rgb(241, 250, 140),
+            danger: Color::Rgb(255, 85, 85),
+            highlight_bg: Color::Rgb(68, 71, 90),
+        },
+    ]
+}
