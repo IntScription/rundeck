@@ -7,28 +7,41 @@ on:
 
 jobs:
   bump-homebrew:
+    name: Update Homebrew tap
     runs-on: ubuntu-latest
 
     steps:
       - name: Extract version
         id: version
         run: |
-          VERSION="${GITHUB_REF_NAME#v}"
-          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
-          echo "tag=$GITHUB_REF_NAME" >> "$GITHUB_OUTPUT"
+          TAG="${GITHUB_REF_NAME}"
+          VERSION="${TAG#v}"
 
-      - name: Compute source tarball sha256
-        id: sha
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+
+      - name: Compute binary sha256 values
+        id: assets
         run: |
           TAG="${{ steps.version.outputs.tag }}"
-          URL="https://github.com/IntScription/rundeck/archive/refs/tags/${TAG}.tar.gz"
+          BASE_URL="https://github.com/IntScription/rundeck/releases/download/${TAG}"
 
-          curl -L "$URL" -o rundeck.tar.gz
+          MAC_ASSET="rundeck-aarch64-apple-darwin.tar.gz"
+          LINUX_ASSET="rundeck-x86_64-unknown-linux-gnu.tar.gz"
 
-          SHA="$(shasum -a 256 rundeck.tar.gz | awk '{print $1}')"
+          MAC_URL="${BASE_URL}/${MAC_ASSET}"
+          LINUX_URL="${BASE_URL}/${LINUX_ASSET}"
 
-          echo "url=$URL" >> "$GITHUB_OUTPUT"
-          echo "sha=$SHA" >> "$GITHUB_OUTPUT"
+          curl --fail -L --retry 10 --retry-delay 6 "$MAC_URL" -o "$MAC_ASSET"
+          curl --fail -L --retry 10 --retry-delay 6 "$LINUX_URL" -o "$LINUX_ASSET"
+
+          MAC_SHA="$(sha256sum "$MAC_ASSET" | awk '{print $1}')"
+          LINUX_SHA="$(sha256sum "$LINUX_ASSET" | awk '{print $1}')"
+
+          echo "mac_url=$MAC_URL" >> "$GITHUB_OUTPUT"
+          echo "linux_url=$LINUX_URL" >> "$GITHUB_OUTPUT"
+          echo "mac_sha=$MAC_SHA" >> "$GITHUB_OUTPUT"
+          echo "linux_sha=$LINUX_SHA" >> "$GITHUB_OUTPUT"
 
       - name: Checkout Homebrew tap
         uses: actions/checkout@v4
@@ -38,17 +51,92 @@ jobs:
           path: homebrew-rundeck
 
       - name: Update formula
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+          TAG: ${{ steps.version.outputs.tag }}
+          MAC_URL: ${{ steps.assets.outputs.mac_url }}
+          MAC_SHA: ${{ steps.assets.outputs.mac_sha }}
+          LINUX_URL: ${{ steps.assets.outputs.linux_url }}
+          LINUX_SHA: ${{ steps.assets.outputs.linux_sha }}
         run: |
           cd homebrew-rundeck
 
           FORMULA="Formula/rundeck.rb"
 
-          ruby -pi -e 'gsub(/url ".*"/, "url \"${{ steps.sha.outputs.url }}\"")' "$FORMULA"
-          ruby -pi -e 'gsub(/sha256 ".*"/, "sha256 \"${{ steps.sha.outputs.sha }}\"")' "$FORMULA"
+          if [ ! -f "$FORMULA" ]; then
+            echo "Formula not found: $FORMULA"
+            exit 1
+          fi
+
+          python3 <<'PY'
+          from pathlib import Path
+          import os
+          import re
+
+          formula = Path("Formula/rundeck.rb")
+          text = formula.read_text()
+
+          version = os.environ["VERSION"]
+          mac_url = os.environ["MAC_URL"]
+          mac_sha = os.environ["MAC_SHA"]
+          linux_url = os.environ["LINUX_URL"]
+          linux_sha = os.environ["LINUX_SHA"]
+
+          text = re.sub(
+              r'version "[^"]+"',
+              f'version "{version}"',
+              text,
+              count=1,
+          )
+
+          def replace_asset_block(text, asset_name, new_url, new_sha):
+              pattern = (
+                  rf'(?P<url_indent>\s*)url "https://github\.com/IntScription/rundeck/releases/download/[^"]+/{re.escape(asset_name)}"\n'
+                  rf'(?P<sha_indent>\s*)sha256 "[^"]+"'
+              )
+
+              def replacement(match):
+                  return (
+                      f'{match.group("url_indent")}url "{new_url}"\n'
+                      f'{match.group("sha_indent")}sha256 "{new_sha}"'
+                  )
+
+              text, count = re.subn(pattern, replacement, text, count=1)
+
+              if count != 1:
+                  raise SystemExit(f"Could not update asset block for {asset_name}")
+
+              return text
+
+          text = replace_asset_block(
+              text,
+              "rundeck-aarch64-apple-darwin.tar.gz",
+              mac_url,
+              mac_sha,
+          )
+
+          text = replace_asset_block(
+              text,
+              "rundeck-x86_64-unknown-linux-gnu.tar.gz",
+              linux_url,
+              linux_sha,
+          )
+
+          formula.write_text(text)
+          PY
+
+      - name: Commit and push formula update
+        run: |
+          cd homebrew-rundeck
 
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
 
-          git add "$FORMULA"
-          git commit -m "Update rundeck to ${{ steps.version.outputs.tag }}" || echo "No changes to commit"
-          git push
+          git add Formula/rundeck.rb
+
+          if git diff --cached --quiet; then
+            echo "No formula changes to commit."
+          else
+            git commit -m "Update rundeck to ${{ steps.version.outputs.tag }}"
+            git push
+          fi
