@@ -1,0 +1,54 @@
+name: Bump Homebrew formula
+
+on:
+  push:
+    tags:
+      - "v*"
+
+jobs:
+  bump-homebrew:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Extract version
+        id: version
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "tag=$GITHUB_REF_NAME" >> "$GITHUB_OUTPUT"
+
+      - name: Compute source tarball sha256
+        id: sha
+        run: |
+          TAG="${{ steps.version.outputs.tag }}"
+          URL="https://github.com/IntScription/rundeck/archive/refs/tags/${TAG}.tar.gz"
+
+          curl -L "$URL" -o rundeck.tar.gz
+
+          SHA="$(shasum -a 256 rundeck.tar.gz | awk '{print $1}')"
+
+          echo "url=$URL" >> "$GITHUB_OUTPUT"
+          echo "sha=$SHA" >> "$GITHUB_OUTPUT"
+
+      - name: Checkout Homebrew tap
+        uses: actions/checkout@v4
+        with:
+          repository: IntScription/homebrew-rundeck
+          token: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+          path: homebrew-rundeck
+
+      - name: Update formula
+        run: |
+          cd homebrew-rundeck
+
+          FORMULA="Formula/rundeck.rb"
+
+          ruby -pi -e 'gsub(/url ".*"/, "url \"${{ steps.sha.outputs.url }}\"")' "$FORMULA"
+          ruby -pi -e 'gsub(/sha256 ".*"/, "sha256 \"${{ steps.sha.outputs.sha }}\"")' "$FORMULA"
+
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          git add "$FORMULA"
+          git commit -m "Update rundeck to ${{ steps.version.outputs.tag }}" || echo "No changes to commit"
+          git push
