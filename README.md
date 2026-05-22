@@ -4,7 +4,7 @@ RunDeck is a fast terminal dashboard for managing personal development projects.
 
 It helps you open project workspaces, tmux sessions, Neovim, lazygit, local previews, deploy links, and project metadata from one clean terminal UI.
 
-![RunDeck Preview](./assets/rundeck-preview.png)
+![RunDeck Catppuccin Mocha Preview](./assets/catppuccin-mocha.png)
 
 ## Why RunDeck?
 
@@ -35,38 +35,11 @@ RunDeck brings all of that into one keyboard-driven dashboard.
 - Configurable keymaps
 - Multiple themes
 - Optional Neovim/LazyVim companion plugin
+- Works great with custom dotfiles, tmux layouts, and terminal-first workflows
 
 ## Installation
 
-```bash
-curl -fsSL https://raw.githubusercontent.com/IntScription/rundeck/main/scripts/install.sh | bash
-```
-
-### Requirements
-
-RunDeck works best with:
-
-- Rust / Cargo
-- tmux
-- git
-- fzf
-- lazygit
-- Neovim
-
-On macOS:
-
-```bash
-brew install tmux lazygit fzf
-```
-
-### Or tap first
-
-```bash
-brew tap IntScription/rundeck
-brew install rundeck
-```
-
-### Universal install script
+### Quick install
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/IntScription/rundeck/main/scripts/install.sh | bash
@@ -85,18 +58,155 @@ echo 'export PATH="$HOME/.cargo/bin:$HOME/.local/bin:$PATH"' >> ~/.zshrc
 source ~/.zshrc
 ```
 
-### From source
+## Install by platform
+
+### macOS
+
+Using Homebrew:
+
+```bash
+brew install IntScription/rundeck/rundeck
+```
+
+Or tap first:
+
+```bash
+brew tap IntScription/rundeck
+brew install rundeck
+```
+
+Using the install script:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/IntScription/rundeck/main/scripts/install.sh | bash
+```
+
+From source:
 
 ```bash
 cargo install --git https://github.com/IntScription/rundeck --force
 ```
 
-Or from a local clone:
+### Linux
+
+Using the universal install script:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/IntScription/rundeck/main/scripts/install.sh | bash
+```
+
+Using Homebrew on Linux:
+
+```bash
+brew install IntScription/rundeck/rundeck
+```
+
+From source:
+
+```bash
+cargo install --git https://github.com/IntScription/rundeck --force
+```
+
+From a local clone:
 
 ```bash
 git clone https://github.com/IntScription/rundeck.git
 cd rundeck
 cargo install --path . --force
+```
+
+#### Linux package-manager notes
+
+RunDeck can be distributed to Linux users in multiple package formats. Use the package that matches your distro once release artifacts are available.
+
+Ubuntu / Debian:
+
+```bash
+sudo apt install ./rundeck-linux-amd64.deb
+```
+
+Fedora / RHEL:
+
+```bash
+sudo dnf install ./rundeck-linux-x86_64.rpm
+```
+
+Arch Linux / Manjaro:
+
+```bash
+sudo pacman -U rundeck-linux-x86_64.pkg.tar.zst
+```
+
+If an AUR package is published later:
+
+```bash
+yay -S rundeck
+```
+
+### Windows
+
+RunDeck is designed around terminal tools like tmux, Neovim, lazygit, and local project folders. On Windows, WSL2 is recommended for the best experience.
+
+#### Windows with WSL2 recommended
+
+Inside your WSL terminal:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/IntScription/rundeck/main/scripts/install.sh | bash
+```
+
+Then run:
+
+```bash
+rundeck
+```
+
+#### Native Windows from source
+
+Install Rust, Git, and Neovim, then run:
+
+```powershell
+cargo install --git https://github.com/IntScription/rundeck --force
+```
+
+If you add a PowerShell installer later, you can expose it like this:
+
+```powershell
+irm https://raw.githubusercontent.com/IntScription/rundeck/main/scripts/install.ps1 | iex
+```
+
+### Docker
+
+Docker support is mainly for development, testing, and container users. RunDeck is designed to run directly on the host because it integrates with tmux, Neovim, local folders, browser URLs, and user config.
+
+Pull from GitHub Container Registry if the image is published:
+
+```bash
+docker pull ghcr.io/intscription/rundeck:latest
+```
+
+Run doctor:
+
+```bash
+docker run --rm ghcr.io/intscription/rundeck:latest doctor
+```
+
+Build locally:
+
+```bash
+docker build -t rundeck:local .
+```
+
+Run doctor locally:
+
+```bash
+docker run --rm rundeck:local doctor
+```
+
+Open a container shell:
+
+```bash
+docker compose run --rm shell
 ```
 
 ## Requirements
@@ -108,11 +218,45 @@ RunDeck works best with:
 - fzf
 - lazygit
 - Neovim
+- LazyVim optional, but recommended for the full terminal IDE workflow
 
-On macOS:
+### macOS tools
 
 ```bash
-brew install tmux lazygit fzf
+brew install tmux lazygit fzf neovim ripgrep fd
+```
+
+### Linux tools
+
+Ubuntu / Debian:
+
+```bash
+sudo apt update
+sudo apt install -y git tmux fzf neovim ripgrep fd-find curl build-essential
+```
+
+Fedora:
+
+```bash
+sudo dnf install -y git tmux fzf neovim ripgrep fd-find curl gcc gcc-c++ make
+```
+
+Arch Linux / Manjaro:
+
+```bash
+sudo pacman -S git tmux fzf neovim ripgrep fd curl base-devel
+```
+
+Install lazygit using your distro package manager, Homebrew on Linux, or the official lazygit release package.
+
+### Windows tools
+
+For the smoothest setup, install these inside WSL2 using the Linux commands above.
+
+For native Windows, use Windows Terminal plus your preferred package manager:
+
+```powershell
+winget install Git.Git Neovim.Neovim Rustlang.Rustup
 ```
 
 Check your setup:
@@ -120,6 +264,54 @@ Check your setup:
 ```bash
 rundeck doctor
 ```
+
+## LazyVim setup
+
+LazyVim is optional, but it pairs well with RunDeck because RunDeck can launch project workspaces directly into Neovim.
+
+### Install LazyVim starter
+
+Back up any existing Neovim config first:
+
+```bash
+mv ~/.config/nvim{,.bak}
+mv ~/.local/share/nvim{,.bak}
+mv ~/.local/state/nvim{,.bak}
+mv ~/.cache/nvim{,.bak}
+```
+
+Clone the LazyVim starter:
+
+```bash
+git clone https://github.com/LazyVim/starter ~/.config/nvim
+rm -rf ~/.config/nvim/.git
+nvim
+```
+
+After opening Neovim, run:
+
+```vim
+:LazyHealth
+```
+
+### Use my dotfiles
+
+If you want the same terminal-first setup with LazyVim, tmux, Alacritty, and related configs, you can use my dotfiles:
+
+```bash
+git clone https://github.com/IntScription/dotfiles ~/.dotfiles
+cd ~/.dotfiles
+./install.sh
+```
+
+Or manually stow only the configs you want:
+
+```bash
+cd ~/.dotfiles
+stow nvim tmux alacritty
+```
+
+The dotfiles repo is useful if you want a ready-to-use LazyVim and tmux workflow that matches the way RunDeck is intended to be used.
 
 ## Usage
 
@@ -317,19 +509,88 @@ That repository contains the Homebrew formula used by:
 brew install IntScription/rundeck/rundeck
 ```
 
+Or tap first:
+
+```bash
+brew tap IntScription/rundeck
+brew install rundeck
+```
+
 The main repository contains the Rust source code. The Homebrew tap only contains the install recipe.
 
 ## Themes
 
-RunDeck supports multiple themes.
+RunDeck ships with multiple terminal-friendly themes. The main screenshot at the top of this README uses the **Catppuccin Mocha** theme.
 
-Open the theme picker:
+Open the theme picker from the dashboard:
 
 ```txt
 T
 ```
 
-Then press `Enter` to apply.
+Then press `Enter` to apply the selected theme, or `q` to close the picker.
+
+You can also set a theme manually in `~/.config/rundeck/config.toml`:
+
+```toml
+theme = "catppuccin-mocha"
+```
+
+Available theme values:
+
+```txt
+catppuccin-mocha
+tokyo-night
+kanagawa-wave
+gruvbox-dark
+rose-pine
+nord
+dracula
+```
+
+### Theme gallery
+
+The gallery expects the screenshots to be stored in the `assets/` folder with these filenames: `catppuccin-mocha.png`, `tokyonight.png`, `kanagawa-wave.png`, `gruvbox-dark.png`, `rose-pine.png`, `nord.png`, and `dracula.png`.
+
+<table>
+  <tr>
+    <td width="50%" align="center" valign="top">
+      <strong>Catppuccin Mocha</strong><br />
+      <img src="./assets/catppuccin-mocha.png" alt="RunDeck Catppuccin Mocha theme" width="100%" />
+    </td>
+    <td width="50%" align="center" valign="top">
+      <strong>Tokyo Night</strong><br />
+      <img src="./assets/tokyonight.png" alt="RunDeck Tokyo Night theme" width="100%" />
+    </td>
+  </tr>
+  <tr>
+    <td width="50%" align="center" valign="top">
+      <strong>Kanagawa Wave</strong><br />
+      <img src="./assets/kanagawa-wave.png" alt="RunDeck Kanagawa Wave theme" width="100%" />
+    </td>
+    <td width="50%" align="center" valign="top">
+      <strong>Gruvbox Dark</strong><br />
+      <img src="./assets/gruvbox-dark.png" alt="RunDeck Gruvbox Dark theme" width="100%" />
+    </td>
+  </tr>
+  <tr>
+    <td width="50%" align="center" valign="top">
+      <strong>Rose Pine</strong><br />
+      <img src="./assets/rose-pine.png" alt="RunDeck Rose Pine theme" width="100%" />
+    </td>
+    <td width="50%" align="center" valign="top">
+      <strong>Nord</strong><br />
+      <img src="./assets/nord.png" alt="RunDeck Nord theme" width="100%" />
+    </td>
+  </tr>
+  <tr>
+    <td width="50%" align="center" valign="top">
+      <strong>Dracula</strong><br />
+      <img src="./assets/dracula.png" alt="RunDeck Dracula theme" width="100%" />
+    </td>
+    <td width="50%" valign="top"></td>
+  </tr>
+</table>
 
 ## Optional Neovim / LazyVim Plugin
 
@@ -341,7 +602,7 @@ Folder:
 nvim/lua/rundeck.lua
 ```
 
-LazyVim setup:
+LazyVim plugin setup:
 
 ```lua
 return {
@@ -378,28 +639,6 @@ Default keymaps:
 | `<leader>ra` | Add current Neovim project to RunDeck |
 | `<leader>rc` | Open create project helper |
 | `<leader>re` | Edit RunDeck config |
-
-## Docker
-
-Docker support is mainly for development, testing, and container users. RunDeck is designed to run directly on the host because it integrates with tmux, Neovim, local folders, browser URLs, and user config.
-
-Build:
-
-```bash
-docker build -t rundeck:local .
-```
-
-Run doctor:
-
-```bash
-docker run --rm rundeck:local doctor
-```
-
-Open a container shell:
-
-```bash
-docker compose run --rm shell
-```
 
 ## Kubernetes
 
