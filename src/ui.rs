@@ -18,9 +18,15 @@ use ratatui::{
     widgets::{Block, Borders, Clear as RatatuiClear, List, ListItem, ListState, Paragraph, Wrap},
 };
 use std::{
+    collections::HashMap,
     io,
     time::{Duration, Instant},
 };
+
+/// How long a cached `dev_server_status` result stays valid before we shell
+/// out to tmux again. Without this, every redraw tick (~160ms) would spawn
+/// fresh tmux subprocesses for the status check.
+const DEV_STATUS_TTL: Duration = Duration::from_secs(2);
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum FocusPanel {
@@ -94,6 +100,7 @@ struct App {
     flash: Option<FlashMessage>,
     started_at: Instant,
     last_prune_check: Instant,
+    dev_status_cache: HashMap<String, (String, Instant)>,
 }
 
 impl App {
@@ -126,6 +133,7 @@ impl App {
             flash: None,
             started_at: Instant::now(),
             last_prune_check: Instant::now(),
+            dev_status_cache: HashMap::new(),
         }
     }
 
@@ -1253,6 +1261,28 @@ fn draw_header(frame: &mut Frame<'_>, app: &mut App, area: Rect, current_theme: 
     frame.render_widget(divider, rows[3]);
 }
 
+fn dev_status_cached(cache: &mut HashMap<String, (String, Instant)>, project: &Project) -> String {
+    let key = project.tmux_session_name();
+    let now = Instant::now();
+
+    if let Some((status, checked_at)) = cache.get(&key)
+        && now.duration_since(*checked_at) < DEV_STATUS_TTL
+    {
+        return status.clone();
+    }
+
+    let status = actions::dev_server_status(project);
+    cache.insert(key, (status.clone(), now));
+    status
+}
+
+fn dev_status_dot(status: &str, current_theme: &theme::Theme) -> Span<'static> {
+    match status {
+        "Running" => Span::styled("● ", Style::default().fg(current_theme.success)),
+        _ => Span::raw("  "),
+    }
+}
+
 fn draw_projects(frame: &mut Frame<'_>, app: &mut App, area: Rect, current_theme: &theme::Theme) {
     let filtered = app.filtered_project_indices();
 
@@ -1286,18 +1316,24 @@ fn draw_projects(frame: &mut Frame<'_>, app: &mut App, area: Rect, current_theme
             ListItem::new(Line::from("Press Esc to clear search")),
         ]
     } else {
-        filtered
-            .iter()
-            .filter_map(|index| app.config.projects.get(*index))
-            .map(|project| {
-                let icon = if app.config.show_icons { "󰏗  " } else { "" };
+        let mut rows = Vec::with_capacity(filtered.len());
 
-                ListItem::new(Line::from(vec![
-                    Span::raw(icon),
-                    Span::raw(project.name.clone()),
-                ]))
-            })
-            .collect()
+        for index in &filtered {
+            let Some(project) = app.config.projects.get(*index) else {
+                continue;
+            };
+
+            let icon = if app.config.show_icons { "󰏗  " } else { "" };
+            let status = dev_status_cached(&mut app.dev_status_cache, project);
+
+            rows.push(ListItem::new(Line::from(vec![
+                dev_status_dot(&status, current_theme),
+                Span::raw(icon),
+                Span::raw(project.name.clone()),
+            ])));
+        }
+
+        rows
     };
 
     let mut state = ListState::default();
@@ -1372,9 +1408,9 @@ fn draw_project_info(
     let inner = block.inner(area);
     frame.render_widget(block, area);
 
-    let lines = if let Some(project) = app.selected_project() {
+    let lines = if let Some(project) = app.config.projects.get(app.selected_project) {
         let keymaps = &app.config.keymaps;
-        let dev_status = actions::dev_server_status(project);
+        let dev_status = dev_status_cached(&mut app.dev_status_cache, project);
         let dev_style = if dev_status == "Running" {
             Style::default().fg(current_theme.success)
         } else {
