@@ -675,3 +675,100 @@ fn extract_after_marker(text: &str, marker: &str) -> Option<u16> {
         digits.parse::<u16>().ok()
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn slugify_lowercases_and_collapses_separators() {
+        assert_eq!(slugify("My Cool App"), "my-cool-app");
+        assert_eq!(slugify("already-slug"), "already-slug");
+        assert_eq!(slugify("CamelCase123"), "camelcase123");
+        assert_eq!(
+            slugify("  --leading and trailing--  "),
+            "leading-and-trailing"
+        );
+        assert_eq!(slugify("a___b"), "a-b");
+    }
+
+    #[test]
+    fn slugify_falls_back_when_nothing_alphanumeric_survives() {
+        assert_eq!(slugify(""), "rundeck-project");
+        assert_eq!(slugify("!!!"), "rundeck-project");
+        assert_eq!(slugify("---"), "rundeck-project");
+    }
+
+    #[test]
+    fn slugify_drops_non_ascii_letters() {
+        // 'é' is not ASCII-alphanumeric, so it becomes a separator like any
+        // other punctuation, not part of the slug.
+        assert_eq!(slugify("café"), "caf");
+    }
+
+    #[test]
+    fn tmux_session_name_slugifies_project_name() {
+        let project = Project {
+            name: "My App".to_string(),
+            path: PathBuf::from("/tmp/my-app"),
+            port: None,
+            deploy_url: None,
+            dev_command: None,
+            last_opened: None,
+        };
+
+        assert_eq!(project.tmux_session_name(), "my-app");
+    }
+
+    #[test]
+    fn extract_after_marker_reads_trailing_digits() {
+        assert_eq!(extract_after_marker("PORT=4000", "PORT="), Some(4000));
+        assert_eq!(extract_after_marker("next dev -p 4321", "-p"), Some(4321));
+        assert_eq!(
+            extract_after_marker("localhost:5173/", "localhost:"),
+            Some(5173)
+        );
+        assert_eq!(extract_after_marker("no port here", "PORT="), None);
+    }
+
+    #[test]
+    fn extract_after_marker_ignores_non_numeric_suffix() {
+        assert_eq!(extract_after_marker("--port foo", "--port"), None);
+    }
+
+    #[test]
+    fn extract_port_from_text_checks_markers_in_priority_order() {
+        assert_eq!(
+            extract_port_from_text(r#"{"scripts": {"dev": "next dev -p 4000"}}"#),
+            Some(4000)
+        );
+        assert_eq!(extract_port_from_text("no markers at all"), None);
+    }
+
+    #[test]
+    fn detect_port_from_package_text_falls_back_to_framework_defaults() {
+        assert_eq!(
+            detect_port_from_package_text(r#"{"dependencies": {"next": "14.0.0"}}"#),
+            Some(3000)
+        );
+        assert_eq!(
+            detect_port_from_package_text(r#"{"devDependencies": {"vite": "5.0.0"}}"#),
+            Some(5173)
+        );
+        assert_eq!(
+            detect_port_from_package_text(r#"{"dependencies": {"expo": "50.0.0"}}"#),
+            Some(8081)
+        );
+        assert_eq!(
+            detect_port_from_package_text(r#"{"dependencies": {"express": "4.0.0"}}"#),
+            None
+        );
+    }
+
+    #[test]
+    fn detect_port_from_package_text_prefers_explicit_port_over_framework_default() {
+        let content =
+            r#"{"dependencies": {"next": "14.0.0"}, "scripts": {"dev": "next dev -p 4321"}}"#;
+        assert_eq!(detect_port_from_package_text(content), Some(4321));
+    }
+}

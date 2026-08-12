@@ -3,7 +3,7 @@ use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
 use std::{
     env, fs,
-    path::PathBuf,
+    path::{Path, PathBuf},
     time::{SystemTime, UNIX_EPOCH},
 };
 
@@ -161,29 +161,59 @@ impl Default for Config {
 
 impl Config {
     pub fn load() -> Result<Self> {
-        let path = config_path()?;
+        Self::load_from(&config_path()?)
+    }
 
+    fn load_from(path: &Path) -> Result<Self> {
         if !path.exists() {
             let cfg = Self::default();
-            cfg.save()?;
+            cfg.save_to(path)?;
             return Ok(cfg);
         }
 
-        let content = fs::read_to_string(&path)
+        let content = fs::read_to_string(path)
             .with_context(|| format!("Failed to read config at {}", path.display()))?;
 
-        Ok(toml::from_str(&content).unwrap_or_default())
+        toml::from_str(&content).with_context(|| {
+            format!(
+                "Failed to parse config at {}. Fix the file, or restore it from {}.bak if one exists.",
+                path.display(),
+                path.display()
+            )
+        })
     }
 
     pub fn save(&self) -> Result<()> {
-        let path = config_path()?;
+        self.save_to(&config_path()?)
+    }
 
+    /// Writes via a temp file + rename so a crash mid-write can't truncate
+    /// the config, and keeps a `.bak` of whatever was previously on disk so
+    /// a corrupted or bad edit can be recovered from.
+    fn save_to(&self, path: &Path) -> Result<()> {
         if let Some(parent) = path.parent() {
             fs::create_dir_all(parent)?;
         }
 
         let content = toml::to_string_pretty(self)?;
-        fs::write(path, content)?;
+        let file_name = path
+            .file_name()
+            .context("Config path has no file name")?
+            .to_string_lossy()
+            .to_string();
+
+        if path.exists() {
+            let backup_path = path.with_file_name(format!("{file_name}.bak"));
+            fs::copy(path, &backup_path).with_context(|| {
+                format!("Failed to back up config to {}", backup_path.display())
+            })?;
+        }
+
+        let tmp_path = path.with_file_name(format!("{file_name}.tmp"));
+        fs::write(&tmp_path, content)
+            .with_context(|| format!("Failed to write temp config at {}", tmp_path.display()))?;
+        fs::rename(&tmp_path, path)
+            .with_context(|| format!("Failed to save config at {}", path.display()))?;
 
         Ok(())
     }
@@ -409,4 +439,185 @@ fn key_down() -> String {
 
 fn key_up() -> String {
     "k".to_string()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use tempfile::TempDir;
+
+    fn config_file_path(dir: &TempDir) -> PathBuf {
+        dir.path().join("config.toml")
+    }
+
+    #[test]
+    fn load_from_missing_path_creates_default_and_persists_it() {
+        let dir = TempDir::new().unwrap();
+        let path = config_file_path(&dir);
+        assert!(!path.exists());
+
+        let cfg = Config::load_from(&path).unwrap();
+
+        assert_eq!(cfg.theme, default_theme());
+        assert!(path.exists(), "load_from should save the default config");
+    }
+
+    #[test]
+    fn save_then_load_roundtrips_projects() {
+        let dir = TempDir::new().unwrap();
+        let path = config_file_path(&dir);
+
+        let mut cfg = Config::default();
+        cfg.projects.push(Project {
+            name: "My App".to_string(),
+            path: PathBuf::from("/tmp/my-app"),
+            port: Some(3000),
+            deploy_url: Some("https://example.com".to_string()),
+            dev_command: None,
+            last_opened: Some(42),
+        });
+
+        cfg.save_to(&path).unwrap();
+        let reloaded = Config::load_from(&path).unwrap();
+
+        assert_eq!(reloaded.projects.len(), 1);
+        assert_eq!(reloaded.projects[0].name, "My App");
+        assert_eq!(reloaded.projects[0].port, Some(3000));
+    }
+
+    #[test]
+    fn load_from_malformed_toml_errors_instead_of_silently_resetting() {
+        let dir = TempDir::new().unwrap();
+        let path = config_file_path(&dir);
+        fs::write(&path, "this is not [valid toml").unwrap();
+
+        let result = Config::load_from(&path);
+
+        assert!(
+            result.is_err(),
+            "a malformed config must error, not silently return an empty default \
+             (that would wipe the user's projects on the next save)"
+        );
+    }
+
+    #[test]
+    fn save_to_keeps_backup_of_previous_version() {
+        let dir = TempDir::new().unwrap();
+        let path = config_file_path(&dir);
+
+        let first = Config {
+            theme: "nord".to_string(),
+            ..Config::default()
+        };
+        first.save_to(&path).unwrap();
+
+        let mut second = first.clone();
+        second.theme = "dracula".to_string();
+        second.save_to(&path).unwrap();
+
+        let backup_path = path.with_file_name("config.toml.bak");
+        assert!(backup_path.exists());
+
+        let backup_content = fs::read_to_string(&backup_path).unwrap();
+        assert!(backup_content.contains("nord"));
+
+        let current_content = fs::read_to_string(&path).unwrap();
+        assert!(current_content.contains("dracula"));
+    }
+
+    fn project_with_path(name: &str, path: PathBuf) -> Project {
+        Project {
+            name: name.to_string(),
+            path,
+            port: None,
+            deploy_url: None,
+            dev_command: None,
+            last_opened: None,
+        }
+    }
+
+    #[test]
+    fn add_project_updates_existing_entry_matched_by_path() {
+        let dir = TempDir::new().unwrap();
+        let project_dir = dir.path().join("my-app");
+        fs::create_dir_all(&project_dir).unwrap();
+
+        let mut cfg = Config::default();
+        let name = cfg
+            .add_project(project_dir.clone(), None, Some(3000), None)
+            .unwrap();
+        assert_eq!(name, "my-app");
+        assert_eq!(cfg.projects.len(), 1);
+
+        // Re-adding the same path with a new port should update, not duplicate.
+        cfg.add_project(project_dir.clone(), None, Some(4000), None)
+            .unwrap();
+
+        assert_eq!(cfg.projects.len(), 1);
+        assert_eq!(cfg.projects[0].port, Some(4000));
+    }
+
+    #[test]
+    fn remove_project_matches_by_name_or_slug() {
+        let mut cfg = Config::default();
+        cfg.projects
+            .push(project_with_path("My App", PathBuf::from("/tmp/my-app")));
+
+        assert!(cfg.remove_project("my-app"));
+        assert!(cfg.projects.is_empty());
+    }
+
+    #[test]
+    fn prune_missing_projects_drops_paths_that_no_longer_exist() {
+        let dir = TempDir::new().unwrap();
+        let existing = dir.path().join("exists");
+        fs::create_dir_all(&existing).unwrap();
+        let missing = dir.path().join("gone");
+
+        let mut cfg = Config::default();
+        cfg.projects.push(project_with_path("exists", existing));
+        cfg.projects.push(project_with_path("gone", missing));
+
+        let pruned = cfg.prune_missing_projects();
+
+        assert_eq!(pruned, 1);
+        assert_eq!(cfg.projects.len(), 1);
+        assert_eq!(cfg.projects[0].name, "exists");
+    }
+
+    #[test]
+    fn sort_projects_orders_by_recency_then_name() {
+        let mut cfg = Config::default();
+        cfg.projects.push(Project {
+            last_opened: Some(10),
+            ..project_with_path("Older", PathBuf::from("/tmp/older"))
+        });
+        cfg.projects.push(Project {
+            last_opened: Some(20),
+            ..project_with_path("Newer", PathBuf::from("/tmp/newer"))
+        });
+        cfg.projects.push(project_with_path(
+            "Never Opened",
+            PathBuf::from("/tmp/never"),
+        ));
+
+        cfg.sort_projects();
+
+        let names: Vec<_> = cfg.projects.iter().map(|p| p.name.as_str()).collect();
+        assert_eq!(names, ["Newer", "Older", "Never Opened"]);
+    }
+
+    #[test]
+    fn project_picker_enabled_treats_disabled_values_as_off() {
+        let mut cfg = Config::default();
+        assert!(cfg.project_picker_enabled());
+
+        for value in ["none", "off", "false", "disabled", "", "  "] {
+            cfg.project_picker = value.to_string();
+            assert!(
+                !cfg.project_picker_enabled(),
+                "expected {value:?} to disable the picker"
+            );
+        }
+    }
 }

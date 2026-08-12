@@ -1096,3 +1096,104 @@ fn run_shell_interactive(command: String, cwd: &Path) -> Result<()> {
 
     Ok(())
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use tempfile::TempDir;
+
+    #[test]
+    fn shell_escape_wraps_and_escapes_single_quotes() {
+        assert_eq!(shell_escape("hello"), "'hello'");
+        assert_eq!(shell_escape("it's"), "'it'\\''s'");
+        assert_eq!(shell_escape(""), "''");
+    }
+
+    #[test]
+    fn is_shell_command_matches_known_shells_only() {
+        assert!(is_shell_command("zsh"));
+        assert!(is_shell_command("bash"));
+        assert!(!is_shell_command("node"));
+        assert!(!is_shell_command(""));
+    }
+
+    #[test]
+    fn extract_after_marker_reads_trailing_digits() {
+        assert_eq!(extract_after_marker("PORT=4000", "PORT="), Some(4000));
+        assert_eq!(extract_after_marker("no port here", "PORT="), None);
+    }
+
+    #[test]
+    fn detect_port_from_package_text_falls_back_to_framework_defaults() {
+        assert_eq!(
+            detect_port_from_package_text(r#"{"dependencies": {"next": "14.0.0"}}"#),
+            Some(3000)
+        );
+        assert_eq!(
+            detect_port_from_package_text(r#"{"dependencies": {"express": "4.0.0"}}"#),
+            None
+        );
+    }
+
+    #[test]
+    fn should_ignore_dir_flags_known_noise_directories() {
+        let dir = TempDir::new().unwrap();
+
+        let node_modules = dir.path().join("node_modules");
+        fs::create_dir_all(&node_modules).unwrap();
+        assert!(should_ignore_dir(&node_modules));
+
+        let src = dir.path().join("src");
+        fs::create_dir_all(&src).unwrap();
+        assert!(!should_ignore_dir(&src));
+    }
+
+    #[test]
+    fn is_project_dir_detects_known_manifest_files() {
+        let dir = TempDir::new().unwrap();
+        assert!(!is_project_dir(dir.path()));
+
+        fs::write(dir.path().join("Cargo.toml"), "[package]").unwrap();
+        assert!(is_project_dir(dir.path()));
+    }
+
+    #[test]
+    fn is_repo_root_detects_git_directory() {
+        let dir = TempDir::new().unwrap();
+        assert!(!is_repo_root(dir.path()));
+
+        fs::create_dir_all(dir.path().join(".git")).unwrap();
+        assert!(is_repo_root(dir.path()));
+    }
+
+    #[test]
+    fn is_workspace_root_requires_at_least_two_app_dirs() {
+        let dir = TempDir::new().unwrap();
+
+        let web = dir.path().join("web");
+        fs::create_dir_all(&web).unwrap();
+        fs::write(web.join("package.json"), "{}").unwrap();
+        assert!(
+            !is_workspace_root(dir.path()),
+            "a single app dir shouldn't count as a workspace root"
+        );
+
+        let mobile = dir.path().join("mobile");
+        fs::create_dir_all(&mobile).unwrap();
+        fs::write(mobile.join("package.json"), "{}").unwrap();
+        assert!(
+            is_workspace_root(dir.path()),
+            "web + mobile package.json files should count as a workspace root"
+        );
+    }
+
+    #[test]
+    fn dedupe_paths_removes_duplicate_entries_for_the_same_directory() {
+        let dir = TempDir::new().unwrap();
+        let path = dir.path().to_path_buf();
+
+        let deduped = dedupe_paths(vec![path.clone(), path.clone(), path]);
+
+        assert_eq!(deduped.len(), 1);
+    }
+}
