@@ -1,20 +1,21 @@
 name: Bump Homebrew formula
 
 on:
-  push:
-    tags:
-      - "v*"
+  workflow_run:
+    workflows: ["Release"]
+    types: [completed]
 
 jobs:
   bump-homebrew:
     name: Update Homebrew tap
     runs-on: ubuntu-latest
+    if: github.event.workflow_run.conclusion == 'success'
 
     steps:
       - name: Extract version
         id: version
         run: |
-          TAG="${GITHUB_REF_NAME}"
+          TAG="${{ github.event.workflow_run.head_branch }}"
           VERSION="${TAG#v}"
 
           echo "tag=$TAG" >> "$GITHUB_OUTPUT"
