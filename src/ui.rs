@@ -28,6 +28,10 @@ use std::{
 /// fresh tmux subprocesses for the status check.
 const DEV_STATUS_TTL: Duration = Duration::from_secs(2);
 
+/// `git status` is more expensive than the tmux checks above (it walks the
+/// working tree), so it gets a longer TTL to keep redraws cheap.
+const GIT_STATUS_TTL: Duration = Duration::from_secs(5);
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum FocusPanel {
     Projects,
@@ -101,6 +105,7 @@ struct App {
     started_at: Instant,
     last_prune_check: Instant,
     dev_status_cache: HashMap<String, (String, Instant)>,
+    git_status_cache: HashMap<String, (Option<actions::GitInfo>, Instant)>,
 }
 
 impl App {
@@ -134,6 +139,7 @@ impl App {
             started_at: Instant::now(),
             last_prune_check: Instant::now(),
             dev_status_cache: HashMap::new(),
+            git_status_cache: HashMap::new(),
         }
     }
 
@@ -1283,6 +1289,33 @@ fn dev_status_dot(status: &str, current_theme: &theme::Theme) -> Span<'static> {
     }
 }
 
+fn git_status_cached(
+    cache: &mut HashMap<String, (Option<actions::GitInfo>, Instant)>,
+    project: &Project,
+) -> Option<actions::GitInfo> {
+    let key = project.path.to_string_lossy().to_string();
+    let now = Instant::now();
+
+    if let Some((status, checked_at)) = cache.get(&key)
+        && now.duration_since(*checked_at) < GIT_STATUS_TTL
+    {
+        return status.clone();
+    }
+
+    let status = actions::git_status(project);
+    cache.insert(key, (status.clone(), now));
+    status
+}
+
+fn git_dirty_dot(status: &Option<actions::GitInfo>, current_theme: &theme::Theme) -> Span<'static> {
+    match status {
+        Some(info) if info.dirty > 0 => {
+            Span::styled("● ", Style::default().fg(current_theme.warning))
+        }
+        _ => Span::raw("  "),
+    }
+}
+
 fn draw_projects(frame: &mut Frame<'_>, app: &mut App, area: Rect, current_theme: &theme::Theme) {
     let filtered = app.filtered_project_indices();
 
@@ -1324,10 +1357,12 @@ fn draw_projects(frame: &mut Frame<'_>, app: &mut App, area: Rect, current_theme
             };
 
             let icon = if app.config.show_icons { "󰏗  " } else { "" };
-            let status = dev_status_cached(&mut app.dev_status_cache, project);
+            let dev_status = dev_status_cached(&mut app.dev_status_cache, project);
+            let git_status = git_status_cached(&mut app.git_status_cache, project);
 
             rows.push(ListItem::new(Line::from(vec![
-                dev_status_dot(&status, current_theme),
+                dev_status_dot(&dev_status, current_theme),
+                git_dirty_dot(&git_status, current_theme),
                 Span::raw(icon),
                 Span::raw(project.name.clone()),
             ])));
@@ -1416,6 +1451,7 @@ fn draw_project_info(
         } else {
             Style::default().fg(current_theme.warning)
         };
+        let git_status = git_status_cached(&mut app.git_status_cache, project);
 
         let mut lines = vec![
             Line::from(vec![Span::styled(
@@ -1449,6 +1485,30 @@ fn draw_project_info(
                 Span::styled(dev_status, dev_style),
             ]),
         ];
+
+        lines.push(match &git_status {
+            Some(info) if info.dirty > 0 => Line::from(vec![
+                Span::styled("Git      ", Style::default().fg(current_theme.muted)),
+                Span::raw(info.branch.clone().unwrap_or_else(|| "HEAD".to_string())),
+                Span::raw("  "),
+                Span::styled(
+                    format!("● {} uncommitted", info.dirty),
+                    Style::default().fg(current_theme.warning),
+                ),
+            ]),
+            Some(info) => Line::from(vec![
+                Span::styled("Git      ", Style::default().fg(current_theme.muted)),
+                Span::styled(
+                    info.branch.clone().unwrap_or_else(|| "HEAD".to_string()),
+                    Style::default().fg(current_theme.success),
+                ),
+                Span::raw("  clean"),
+            ]),
+            None => Line::from(vec![
+                Span::styled("Git      ", Style::default().fg(current_theme.muted)),
+                Span::styled("not a repo", Style::default().fg(current_theme.muted)),
+            ]),
+        });
 
         if let Some(port) = project.effective_port() {
             lines.push(Line::from(vec![

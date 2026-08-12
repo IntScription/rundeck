@@ -467,6 +467,10 @@ impl Project {
         slugify(&self.name)
     }
 
+    pub fn is_git_repo(&self) -> bool {
+        self.path.join(".git").exists()
+    }
+
     fn package_json(&self) -> Option<Value> {
         read_package_json(&self.package_root())
     }
@@ -718,6 +722,24 @@ mod tests {
         };
 
         assert_eq!(project.tmux_session_name(), "my-app");
+    }
+
+    #[test]
+    fn is_git_repo_checks_for_dot_git_directory() {
+        let dir = tempfile::TempDir::new().unwrap();
+        let project = Project {
+            name: "test".to_string(),
+            path: dir.path().to_path_buf(),
+            port: None,
+            deploy_url: None,
+            dev_command: None,
+            last_opened: None,
+        };
+
+        assert!(!project.is_git_repo());
+
+        fs::create_dir_all(dir.path().join(".git")).unwrap();
+        assert!(project.is_git_repo());
     }
 
     #[test]

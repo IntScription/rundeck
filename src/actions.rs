@@ -853,6 +853,46 @@ pub fn dev_server_status(project: &Project) -> String {
     }
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct GitInfo {
+    pub branch: Option<String>,
+    pub dirty: usize,
+}
+
+/// Returns `None` for projects that aren't a git repo. Uses `-uno` (skip
+/// untracked files) so this stays cheap even in repos with large untracked
+/// trees — it only reports staged/modified changes to tracked files.
+pub fn git_status(project: &Project) -> Option<GitInfo> {
+    if !project.is_git_repo() {
+        return None;
+    }
+
+    let path = project.path.to_string_lossy().to_string();
+
+    let branch = Command::new("git")
+        .args(["-C", &path, "rev-parse", "--abbrev-ref", "HEAD"])
+        .output()
+        .ok()
+        .filter(|output| output.status.success())
+        .map(|output| String::from_utf8_lossy(&output.stdout).trim().to_string())
+        .filter(|branch| !branch.is_empty());
+
+    let dirty = Command::new("git")
+        .args(["-C", &path, "status", "--porcelain", "-uno"])
+        .output()
+        .ok()
+        .filter(|output| output.status.success())
+        .map(|output| {
+            String::from_utf8_lossy(&output.stdout)
+                .lines()
+                .filter(|line| !line.trim().is_empty())
+                .count()
+        })
+        .unwrap_or(0);
+
+    Some(GitInfo { branch, dirty })
+}
+
 fn current_tmux_session() -> Result<Option<String>> {
     if env::var("TMUX").is_err() {
         return Ok(None);
@@ -1195,5 +1235,80 @@ mod tests {
         let deduped = dedupe_paths(vec![path.clone(), path.clone(), path]);
 
         assert_eq!(deduped.len(), 1);
+    }
+
+    fn project_at(path: PathBuf) -> Project {
+        Project {
+            name: "test".to_string(),
+            path,
+            port: None,
+            deploy_url: None,
+            dev_command: None,
+            last_opened: None,
+        }
+    }
+
+    fn init_git_repo(dir: &Path) {
+        let run = |args: &[&str]| {
+            Command::new("git")
+                .args(args)
+                .current_dir(dir)
+                .status()
+                .unwrap();
+        };
+
+        run(&["init", "-q", "-b", "test-branch"]);
+        run(&["config", "user.email", "test@example.com"]);
+        run(&["config", "user.name", "Test"]);
+        fs::write(dir.join("file.txt"), "hello").unwrap();
+        run(&["add", "."]);
+        run(&["commit", "-q", "-m", "initial"]);
+    }
+
+    #[test]
+    fn git_status_returns_none_for_non_repo() {
+        let dir = TempDir::new().unwrap();
+        let project = project_at(dir.path().to_path_buf());
+
+        assert!(git_status(&project).is_none());
+    }
+
+    #[test]
+    fn git_status_reports_branch_and_clean_state() {
+        let dir = TempDir::new().unwrap();
+        init_git_repo(dir.path());
+        let project = project_at(dir.path().to_path_buf());
+
+        let status = git_status(&project).expect("expected a git repo");
+
+        assert_eq!(status.branch.as_deref(), Some("test-branch"));
+        assert_eq!(status.dirty, 0);
+    }
+
+    #[test]
+    fn git_status_counts_modified_tracked_files_as_dirty() {
+        let dir = TempDir::new().unwrap();
+        init_git_repo(dir.path());
+        fs::write(dir.path().join("file.txt"), "changed").unwrap();
+        let project = project_at(dir.path().to_path_buf());
+
+        let status = git_status(&project).expect("expected a git repo");
+
+        assert_eq!(status.dirty, 1);
+    }
+
+    #[test]
+    fn git_status_ignores_untracked_files() {
+        let dir = TempDir::new().unwrap();
+        init_git_repo(dir.path());
+        fs::write(dir.path().join("untracked.txt"), "new").unwrap();
+        let project = project_at(dir.path().to_path_buf());
+
+        let status = git_status(&project).expect("expected a git repo");
+
+        assert_eq!(
+            status.dirty, 0,
+            "untracked files shouldn't count as dirty with -uno"
+        );
     }
 }
