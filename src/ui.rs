@@ -64,6 +64,7 @@ enum Action {
     Doctor,
     KillSession,
     StopDev,
+    TogglePin,
 }
 
 #[derive(Debug, Clone)]
@@ -268,6 +269,21 @@ impl App {
         let _ = self.config.save();
     }
 
+    fn toggle_pin_selected(&mut self) {
+        let Some(name) = self.selected_project_name() else {
+            return;
+        };
+
+        let now_pinned = self.config.toggle_pinned(&name);
+
+        self.config.sort_projects();
+        self.select_project_by_name(&name);
+
+        let _ = self.config.save();
+
+        self.set_flash(if now_pinned { "Pinned" } else { "Unpinned" }, false);
+    }
+
     fn maybe_prune_missing_projects(&mut self) {
         if self.last_prune_check.elapsed() < Duration::from_secs(2) {
             return;
@@ -460,6 +476,17 @@ impl App {
                 hint: keymaps.kill_session.clone(),
                 action: Action::KillSession,
                 kind: CommandKind::Danger,
+            });
+
+            items.push(CommandItem {
+                label: if self.selected_project().is_some_and(|p| p.pinned) {
+                    "Unpin project".to_string()
+                } else {
+                    "Pin project".to_string()
+                },
+                hint: keymaps.pin.clone(),
+                action: Action::TogglePin,
+                kind: CommandKind::Utility,
             });
         }
 
@@ -666,6 +693,11 @@ fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, app: &mut App)
 
             if key_matches(&key.code, &keymaps.stop_dev) {
                 run_action(terminal, app, Action::StopDev)?;
+                continue;
+            }
+
+            if key_matches(&key.code, &keymaps.pin) {
+                app.toggle_pin_selected();
                 continue;
             }
 
@@ -995,6 +1027,11 @@ fn run_action(
         return Ok(());
     }
 
+    if matches!(action, Action::TogglePin) {
+        app.toggle_pin_selected();
+        return Ok(());
+    }
+
     let should_touch_project = matches!(
         action,
         Action::Workspace
@@ -1058,13 +1095,16 @@ fn run_action(
                 | Action::EditDeploy
                 | Action::Config
                 | Action::Themes
-                | Action::Doctor => Ok(()),
+                | Action::Doctor
+                | Action::TogglePin => Ok(()),
             }
         }
 
-        Action::AddProject | Action::CreateProject | Action::RemoveProject | Action::EditDeploy => {
-            Ok(())
-        }
+        Action::AddProject
+        | Action::CreateProject
+        | Action::RemoveProject
+        | Action::EditDeploy
+        | Action::TogglePin => Ok(()),
     };
 
     match result {
@@ -1316,6 +1356,14 @@ fn git_dirty_dot(status: &Option<actions::GitInfo>, current_theme: &theme::Theme
     }
 }
 
+fn pinned_marker(pinned: bool, current_theme: &theme::Theme) -> Span<'static> {
+    if pinned {
+        Span::styled("★ ", Style::default().fg(current_theme.accent))
+    } else {
+        Span::raw("  ")
+    }
+}
+
 fn draw_projects(frame: &mut Frame<'_>, app: &mut App, area: Rect, current_theme: &theme::Theme) {
     let filtered = app.filtered_project_indices();
 
@@ -1363,6 +1411,7 @@ fn draw_projects(frame: &mut Frame<'_>, app: &mut App, area: Rect, current_theme
             rows.push(ListItem::new(Line::from(vec![
                 dev_status_dot(&dev_status, current_theme),
                 git_dirty_dot(&git_status, current_theme),
+                pinned_marker(project.pinned, current_theme),
                 Span::raw(icon),
                 Span::raw(project.name.clone()),
             ])));
@@ -1589,7 +1638,12 @@ fn draw_project_info(
                 keymaps.lazygit.clone(),
                 Style::default().fg(current_theme.accent),
             ),
-            Span::raw(" git"),
+            Span::raw(" git · "),
+            Span::styled(
+                keymaps.pin.clone(),
+                Style::default().fg(current_theme.accent),
+            ),
+            Span::raw(if project.pinned { " unpin" } else { " pin" }),
         ]));
 
         lines

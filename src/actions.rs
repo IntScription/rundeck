@@ -1245,6 +1245,7 @@ mod tests {
             deploy_url: None,
             dev_command: None,
             last_opened: None,
+            pinned: false,
         }
     }
 

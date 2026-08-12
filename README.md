@@ -489,6 +489,7 @@ Default keymaps:
 | `B` | Open deployed preview |
 | `g` | Open lazygit |
 | `u` | Edit deploy URL |
+| `p` | Pin/unpin project |
 | `e` | Edit RunDeck config |
 | `T` | Theme picker |
 | `D` | Doctor |
@@ -645,6 +646,7 @@ doctor = "D"
 kill_session = "x"
 stop_dev = "X"
 reload = "r"
+pin = "p"
 left = "h"
 right = "l"
 down = "j"

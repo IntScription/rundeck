@@ -99,6 +99,9 @@ pub struct Keymaps {
     #[serde(default = "key_reload")]
     pub reload: String,
 
+    #[serde(default = "key_pin")]
+    pub pin: String,
+
     #[serde(default = "key_left")]
     pub left: String,
 
@@ -134,6 +137,7 @@ impl Default for Keymaps {
             kill_session: key_kill_session(),
             stop_dev: key_stop_dev(),
             reload: key_reload(),
+            pin: key_pin(),
             left: key_left(),
             right: key_right(),
             down: key_down(),
@@ -256,6 +260,7 @@ impl Config {
             deploy_url,
             dev_command: None,
             last_opened: None,
+            pinned: false,
         });
 
         Ok(project_name)
@@ -300,11 +305,29 @@ impl Config {
         }
     }
 
+    /// Flips the pinned state of a project and returns the new value.
+    pub fn toggle_pinned(&mut self, name: &str) -> bool {
+        let Some(project) = self
+            .projects
+            .iter_mut()
+            .find(|project| project.name == name || project.tmux_session_name() == name)
+        else {
+            return false;
+        };
+
+        project.pinned = !project.pinned;
+        project.pinned
+    }
+
     pub fn sort_projects(&mut self) {
         self.projects.sort_by(|a, b| {
-            b.last_opened
-                .unwrap_or_default()
-                .cmp(&a.last_opened.unwrap_or_default())
+            b.pinned
+                .cmp(&a.pinned)
+                .then_with(|| {
+                    b.last_opened
+                        .unwrap_or_default()
+                        .cmp(&a.last_opened.unwrap_or_default())
+                })
                 .then_with(|| a.name.to_lowercase().cmp(&b.name.to_lowercase()))
         });
     }
@@ -425,6 +448,10 @@ fn key_reload() -> String {
     "r".to_string()
 }
 
+fn key_pin() -> String {
+    "p".to_string()
+}
+
 fn key_left() -> String {
     "h".to_string()
 }
@@ -475,6 +502,7 @@ mod tests {
             deploy_url: Some("https://example.com".to_string()),
             dev_command: None,
             last_opened: Some(42),
+            pinned: false,
         });
 
         cfg.save_to(&path).unwrap();
@@ -533,6 +561,7 @@ mod tests {
             deploy_url: None,
             dev_command: None,
             last_opened: None,
+            pinned: false,
         }
     }
 
@@ -605,6 +634,38 @@ mod tests {
 
         let names: Vec<_> = cfg.projects.iter().map(|p| p.name.as_str()).collect();
         assert_eq!(names, ["Newer", "Older", "Never Opened"]);
+    }
+
+    #[test]
+    fn sort_projects_puts_pinned_projects_first_regardless_of_recency() {
+        let mut cfg = Config::default();
+        cfg.projects.push(Project {
+            last_opened: Some(100),
+            ..project_with_path("Recent", PathBuf::from("/tmp/recent"))
+        });
+        cfg.projects.push(Project {
+            last_opened: Some(1),
+            pinned: true,
+            ..project_with_path("Pinned But Old", PathBuf::from("/tmp/pinned"))
+        });
+
+        cfg.sort_projects();
+
+        let names: Vec<_> = cfg.projects.iter().map(|p| p.name.as_str()).collect();
+        assert_eq!(names, ["Pinned But Old", "Recent"]);
+    }
+
+    #[test]
+    fn toggle_pinned_flips_state_and_returns_new_value() {
+        let mut cfg = Config::default();
+        cfg.projects
+            .push(project_with_path("My App", PathBuf::from("/tmp/my-app")));
+
+        assert!(cfg.toggle_pinned("my-app"));
+        assert!(cfg.projects[0].pinned);
+
+        assert!(!cfg.toggle_pinned("My App"));
+        assert!(!cfg.projects[0].pinned);
     }
 
     #[test]

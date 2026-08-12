@@ -20,6 +20,9 @@ pub struct Project {
 
     #[serde(default)]
     pub last_opened: Option<u64>,
+
+    #[serde(default)]
+    pub pinned: bool,
 }
 
 impl Project {
@@ -719,6 +722,7 @@ mod tests {
             deploy_url: None,
             dev_command: None,
             last_opened: None,
+            pinned: false,
         };
 
         assert_eq!(project.tmux_session_name(), "my-app");
@@ -734,6 +738,7 @@ mod tests {
             deploy_url: None,
             dev_command: None,
             last_opened: None,
+            pinned: false,
         };
 
         assert!(!project.is_git_repo());
